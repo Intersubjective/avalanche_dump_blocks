@@ -10,22 +10,20 @@ import (
   "time"
   "io"
   "crypto/tls"
+  "crypto/x509"
   "encoding/json"
   "strconv"
   "database/sql"
   _ "github.com/lib/pq"
 )
 
-func store_block(height int, block string) error {
-  access := "host=127.0.0.1 port=12345 user=postgres password=postgres dbname=zombie sslmode=disable"
-  req    := "INSERT INTO blocks (height, hex) VALUES (%d, '%s') ON CONFLICT DO NOTHING"
-
+func store_block(access string, req string, height int, block_hex string) error {
   db, err := sql.Open("postgres", access)
   if err != nil {
     return err
   }
 
-  sql := fmt.Sprintf(req, height, block)
+  sql := fmt.Sprintf(req, height, block_hex)
 
   _, err = db.Exec(sql)
   db.Close()
@@ -46,7 +44,7 @@ type Response_Block struct {
 
 func get_height(client *http.Client, endpoint string) (int, error) {
   req      := "{ \"jsonrpc\": \"2.0\", \"method\": \"platform.getHeight\", \"params\": {}, \"id\": 1 }"
-  res, err := client.Post(fmt.Sprintf("%s/ext/bc/P", endpoint), "application/json", strings.NewReader(req))
+  res, err := client.Post(endpoint, "application/json", strings.NewReader(req))
 
   if err != nil {
     return 0, err
@@ -76,7 +74,7 @@ func get_height(client *http.Client, endpoint string) (int, error) {
 
 func get_block(client *http.Client, endpoint string, height int) (string, error) {
   req := fmt.Sprintf("{ \"jsonrpc\": \"2.0\", \"method\": \"platform.getBlockByHeight\", \"params\": { \"height\": %d, \"encoding\": \"hex\" }, \"id\": 1 }", height)
-  res, err := client.Post(fmt.Sprintf("%s/ext/bc/P", endpoint), "application/json", strings.NewReader(req))
+  res, err := client.Post(endpoint, "application/json", strings.NewReader(req))
 
   if err != nil {
     return "", err
@@ -99,7 +97,53 @@ func get_block(client *http.Client, endpoint string, height int) (string, error)
   return json_block.Result.Block, nil
 }
 
+func init_http(cert_file_path string, key_file_path string, ca_cert_file_path string) (*http.Client, error) {
+  if cert_file_path == "" && key_file_path == "" && ca_cert_file_path == "" {
+    tr := &http.Transport {
+      TLSClientConfig : &tls.Config { InsecureSkipVerify: true, },
+    }
+
+    return &http.Client { Transport : tr, }, nil
+  }
+
+  client_tls_cert, err := tls.LoadX509KeyPair(cert_file_path, key_file_path)
+  if err != nil {
+    return nil, err
+  }
+
+  cert_pool, err := x509.SystemCertPool()
+  if err != nil {
+    return nil, err
+  }
+
+  ca_cert_pem, err := os.ReadFile(ca_cert_file_path)
+  if err != nil {
+    return nil, err
+  }
+
+  if ok := cert_pool.AppendCertsFromPEM(ca_cert_pem); !ok {
+    return nil, err
+  }
+
+  tls_config := &tls.Config{
+    RootCAs      : cert_pool,
+    Certificates : []tls.Certificate { client_tls_cert },
+  }
+
+  tr := &http.Transport{
+    TLSClientConfig : tls_config,
+  }
+
+  return &http.Client { Transport : tr, }, nil
+}
+
 func main() {
+  //  ----------------------------------------------------------------
+  //
+  //    Cancel signal
+  //
+  //  ----------------------------------------------------------------
+
   on_sig := make(chan bool,      1)
   sigs   := make(chan os.Signal, 1)
 
@@ -110,16 +154,78 @@ func main() {
     on_sig <- true
   }()
 
-  endpoints := []string {
-    "https://avalanche-p-chain-rpc.publicnode.com",
+  //  ----------------------------------------------------------------
+  //
+  //    Settings
+  //
+  //  ----------------------------------------------------------------
+
+  dry_run, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_DRY_RUN"))
+  if err != nil {
+    fmt.Printf("Invalid DRY_RUN value: %s\n", err)
+    return;
   }
 
-  index := 0
-
-  tr := &http.Transport{
-    TLSClientConfig : &tls.Config{ InsecureSkipVerify: true, },
+  log_blocks, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_LOG"))
+  if err != nil {
+    fmt.Printf("Invalid LOG_BLOCKS value: %s\n", err)
+    return;
   }
-  client := &http.Client { Transport: tr, }
+
+  update_period := 200
+
+  update_period_str := os.Getenv("DUMPBLOCKS_PERIOD")
+  if update_period_str != "" {
+    update_period, err = strconv.Atoi(update_period_str)
+    if err != nil {
+      fmt.Printf("Invalid DUMPBLOCKS_PERIOD value: %s\n", err)
+      return;
+    }
+  }
+
+  endpoint := os.Getenv("DUMPBLOCKS_NODE_ENDPOINT")
+  access   := os.Getenv("DUMPBLOCKS_DB_ACCESS")
+  req      := os.Getenv("DUMPBLOCKS_DB_REQUEST")
+
+  cert_file_path    := os.Getenv("DUMPBLOCKS_CERT_FILE")
+  key_file_path     := os.Getenv("DUMPBLOCKS_KEY_FILE");
+  ca_cert_file_path := os.Getenv("DUMPBLOCKS_CA_CERT_FILE");
+
+  if endpoint == "" {
+    fmt.Printf("Error: No DUMPBLOCKS_NODE_ENDPOINT\n")
+    return
+  }
+
+  if access == "" {
+    fmt.Printf("Error: No DUMPBLOCKS_DB_ACCESS\n")
+    return
+  }
+
+  if req == "" {
+    fmt.Printf("Error: No DUMPBLOCKS_DB_REQUEST\n")
+    return
+  }
+
+  //  Check DUMPBLOCKS_DB_REQUEST syntax
+  defer func() {
+    if recover() != nil {
+      fmt.Printf("Invalid DUMPBLOCKS_DB_REQUEST value")
+      return
+    }
+  }()
+  _ = fmt.Sprintf(req, 0, "00000000")
+
+  //  ----------------------------------------------------------------
+  //
+  //    Receive and store blocks
+  //
+  //  ----------------------------------------------------------------
+
+  client, err := init_http(cert_file_path, key_file_path, ca_cert_file_path)
+  if err != nil {
+    fmt.Printf("%s\n", err)
+    return
+  }
 
   max_height := 0
 
@@ -131,17 +237,16 @@ func main() {
         fmt.Printf("\n");
         done = true
       default:
-        time.Sleep(time.Millisecond * 200);
+        time.Sleep(time.Millisecond * time.Duration(update_period))
     }
 
     if done {
       break
     }
 
-    height, err := get_height(client, endpoints[index])
+    height, err := get_height(client, endpoint)
     if err != nil {
       fmt.Printf("%s\n", err);
-      index = (index + 1) % len(endpoints)
       continue;
     }
 
@@ -156,18 +261,28 @@ func main() {
     for max_height < height {
       max_height++
 
-      block, err := get_block(client, endpoints[index], max_height)
+      block, err := get_block(client, endpoint, max_height)
       if err != nil {
         fmt.Printf("%s\n", err);
-        index = (index + 1) % len(endpoints)
         continue;
       }
 
-      fmt.Printf("[%08d] %s\n", max_height, block)
+      if block[:2] != "0x" {
+        fmt.Printf("Invalid hex string: %s\n", block);
+        continue;
+      }
 
-      err = store_block(max_height, block)
-      if err != nil {
-        fmt.Printf("%s\n", err)
+      block_hex := block[2:]
+
+      if dry_run == 0 {
+        err = store_block(access, req, max_height, block_hex)
+        if err != nil {
+          fmt.Printf("%s\n", err)
+        }
+      }
+
+      if log_blocks != 0 {
+        fmt.Printf("[%08d] %s\n", max_height, block_hex)
       }
     }
   }
