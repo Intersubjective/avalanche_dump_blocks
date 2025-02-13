@@ -162,13 +162,13 @@ func main() {
 
   dry_run, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_DRY_RUN"))
   if err != nil {
-    fmt.Printf("Invalid DRY_RUN value: %s\n", err)
+    fmt.Printf("Invalid DUMPBLOCKS_DRY_RUN value: %s\n", err)
     return;
   }
 
   log_blocks, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_LOG"))
   if err != nil {
-    fmt.Printf("Invalid LOG_BLOCKS value: %s\n", err)
+    fmt.Printf("Invalid DUMPBLOCKS_LOG value: %s\n", err)
     return;
   }
 
@@ -207,13 +207,13 @@ func main() {
   }
 
   //  Check DUMPBLOCKS_DB_REQUEST syntax
-  defer func() {
-    if recover() != nil {
-      fmt.Printf("Invalid DUMPBLOCKS_DB_REQUEST value")
+  {
+    s := fmt.Sprintf(req, 0, "00000000")
+    if strings.Contains(s, "%!") {
+      fmt.Printf("Error: Invalid DUMPBLOCKS_DB_REQUEST value\n")
       return
     }
-  }()
-  _ = fmt.Sprintf(req, 0, "00000000")
+  }
 
   //  ----------------------------------------------------------------
   //
