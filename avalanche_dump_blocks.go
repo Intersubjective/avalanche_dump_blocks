@@ -97,10 +97,10 @@ func get_block(client *http.Client, endpoint string, height int) (string, error)
   return json_block.Result.Block, nil
 }
 
-func init_http(cert_file_path string, key_file_path string, ca_cert_file_path string) (*http.Client, error) {
+func init_http(cert_file_path string, key_file_path string, ca_cert_file_path string, skip_verify bool) (*http.Client, error) {
   if cert_file_path == "" && key_file_path == "" && ca_cert_file_path == "" {
     tr := &http.Transport {
-      TLSClientConfig : &tls.Config {},
+      TLSClientConfig : &tls.Config { InsecureSkipVerify: skip_verify, },
     }
 
     return &http.Client { Transport : tr, }, nil
@@ -163,13 +163,19 @@ func main() {
   dry_run, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_DRY_RUN"))
   if err != nil {
     fmt.Printf("Invalid DUMPBLOCKS_DRY_RUN value: %s\n", err)
-    return;
+    return
   }
 
   log_blocks, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_LOG"))
   if err != nil {
     fmt.Printf("Invalid DUMPBLOCKS_LOG value: %s\n", err)
-    return;
+    return
+  }
+
+  skip_verify, err := strconv.Atoi(os.Getenv("DUMPBLOCKS_TLS_SKIP_VERIFY"))
+  if err != nil {
+    fmt.Printf("Invalid DUMPBLOCKS_TLS_SKIP_VERIFY value: %s\n", err);
+    return
   }
 
   update_period := 200
@@ -221,7 +227,7 @@ func main() {
   //
   //  ----------------------------------------------------------------
 
-  client, err := init_http(cert_file_path, key_file_path, ca_cert_file_path)
+  client, err := init_http(cert_file_path, key_file_path, ca_cert_file_path, skip_verify != 0)
   if err != nil {
     fmt.Printf("%s\n", err)
     return

@@ -8,6 +8,7 @@ Receive new blocks from Avalanche node via HTTP API endpoint and store them into
 - `DUMPBLOCKS_NODE_ENDPOINT` - Avalanche node endpoint, e.g. `"https://avalanche-p-chain-rpc.publicnode.com/ext/bc/P"`
 - `DUMPBLOCKS_DB_ACCESS` - PostgreSQL database access string, e.g. `"host=127.0.0.1 port=12345 user=postgres password=postgres dbname=blocks sslmode=disable"`
 - `DUMPBLOCKS_DB_REQUEST` - PostgreSQL request string, e.g. `"INSERT INTO blocks (height, hex) VALUES (%d, '%s') ON CONFLICT DO NOTHING"`
+- `DUMPBLOCKS_TLS_SKIP_VERIFY` - `1` to skip verification for TLS; `0` otherwise.
 
 ### Optional client TLS certificate
 - `DUMPBLOCKS_CA_CERT_FILE` - CA cert file path, e.g. `"/usr/ca-cert.pem"`
