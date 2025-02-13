@@ -100,7 +100,7 @@ func get_block(client *http.Client, endpoint string, height int) (string, error)
 func init_http(cert_file_path string, key_file_path string, ca_cert_file_path string) (*http.Client, error) {
   if cert_file_path == "" && key_file_path == "" && ca_cert_file_path == "" {
     tr := &http.Transport {
-      TLSClientConfig : &tls.Config { InsecureSkipVerify: true, },
+      TLSClientConfig : &tls.Config {},
     }
 
     return &http.Client { Transport : tr, }, nil
