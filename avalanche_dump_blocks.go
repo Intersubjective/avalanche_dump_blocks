@@ -47,6 +47,7 @@ func get_height(client *http.Client, endpoint string) (int, error) {
   res, err := client.Post(endpoint, "application/json", strings.NewReader(req))
 
   if err != nil {
+    fmt.Printf("Failed to send request\n")
     return 0, err
   }
 
@@ -54,13 +55,15 @@ func get_height(client *http.Client, endpoint string) (int, error) {
   res.Body.Close()
 
   if err != nil {
-    fmt.Printf("%s\n", err)
+    fmt.Printf("Failed to read response\n")
+    return 0, err
   }
 
   var json_height Response_Height
 
   err = json.Unmarshal(body, &json_height)
   if err != nil {
+    fmt.Printf("Failed to unmarshal JSON:\n%s\n", body)
     return 0, err
   }
 
@@ -77,6 +80,7 @@ func get_block(client *http.Client, endpoint string, height int) (string, error)
   res, err := client.Post(endpoint, "application/json", strings.NewReader(req))
 
   if err != nil {
+    fmt.Printf("Failed to send request\n")
     return "", err
   }
 
@@ -84,13 +88,15 @@ func get_block(client *http.Client, endpoint string, height int) (string, error)
   res.Body.Close()
 
   if err != nil {
-    fmt.Printf("%s\n", err)
+    fmt.Printf("Failed to read response\n")
+    return "", err
   }
 
   var json_block Response_Block
 
   err = json.Unmarshal(body, &json_block)
   if err != nil {
+    fmt.Printf("Failed to unmarshal JSON:\n%s\n", body)
     return "", err
   }
 
@@ -252,6 +258,7 @@ func main() {
 
     height, err := get_height(client, endpoint)
     if err != nil {
+      fmt.Printf("get_height failed\n");
       fmt.Printf("%s\n", err);
       continue;
     }
@@ -269,6 +276,7 @@ func main() {
 
       block, err := get_block(client, endpoint, max_height)
       if err != nil {
+        fmt.Printf("get_block failed");
         fmt.Printf("%s\n", err);
         continue;
       }

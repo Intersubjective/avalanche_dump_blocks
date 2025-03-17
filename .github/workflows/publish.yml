@@ -1,0 +1,15 @@
+name: Publish
+on:
+  workflow_dispatch:
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build docker image
+      run: |
+        docker build -t vbulavintsev/avalanche_dump_blocks:latest .
+    - name: Push docker image to Dockerhub
+      run: |
+        docker login -u vbulavintsev -p ${{ secrets.DOCKERHUB_TOKEN }}
+        docker image push vbulavintsev/avalanche_dump_blocks:latest
